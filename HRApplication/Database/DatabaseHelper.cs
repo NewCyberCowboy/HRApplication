@@ -11,13 +11,14 @@ namespace HRApplication.Database
     public class DatabaseHelper
     {
         private NpgsqlConnection connection;
-        private string connectionString;
 
         public bool Connect(string host, string port, string database, string username, string password)
         {
             try
             {
-                connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+                string safePassword = string.IsNullOrEmpty(password) ? "" : password;
+                string connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={safePassword};Timeout=30";
+
                 connection = new NpgsqlConnection(connectionString);
                 connection.Open();
                 return true;
@@ -35,73 +36,29 @@ namespace HRApplication.Database
             connection?.Close();
         }
 
-        // Кандидаты
-        public List<Candidate> GetCandidates(string specialization = null, string skills = null,
-            int? minAge = null, int? maxAge = null, int? vacancyId = null)
+        public List<Candidate> GetCandidates()
         {
             var candidates = new List<Candidate>();
 
             try
             {
-                string query = @"
-                    SELECT DISTINCT c.* 
-                    FROM candidates c
-                    LEFT JOIN applications a ON c.candidate_id = a.candidate_id
-                    WHERE 1=1";
-
-                var parameters = new List<NpgsqlParameter>();
-
-                if (!string.IsNullOrEmpty(specialization))
-                {
-                    query += " AND c.specialization ILIKE @specialization";
-                    parameters.Add(new NpgsqlParameter("@specialization", $"%{specialization}%"));
-                }
-
-                if (!string.IsNullOrEmpty(skills))
-                {
-                    query += " AND c.skills ILIKE @skills";
-                    parameters.Add(new NpgsqlParameter("@skills", $"%{skills}%"));
-                }
-
-                if (minAge.HasValue)
-                {
-                    query += " AND c.age >= @minAge";
-                    parameters.Add(new NpgsqlParameter("@minAge", minAge.Value));
-                }
-
-                if (maxAge.HasValue)
-                {
-                    query += " AND c.age <= @maxAge";
-                    parameters.Add(new NpgsqlParameter("@maxAge", maxAge.Value));
-                }
-
-                if (vacancyId.HasValue)
-                {
-                    query += " AND a.vacancy_id = @vacancyId";
-                    parameters.Add(new NpgsqlParameter("@vacancyId", vacancyId.Value));
-                }
-
-                query += " ORDER BY c.first_name, c.last_name";
+                string query = "SELECT * FROM candidates ORDER BY first_name, last_name";
 
                 using (var cmd = new NpgsqlCommand(query, connection))
+                using (var reader = cmd.ExecuteReader())
                 {
-                    cmd.Parameters.AddRange(parameters.ToArray());
-
-                    using (var reader = cmd.ExecuteReader())
+                    while (reader.Read())
                     {
-                        while (reader.Read())
+                        candidates.Add(new Candidate
                         {
-                            candidates.Add(new Candidate
-                            {
-                                CandidateId = reader.GetInt32(reader.GetOrdinal("candidate_id")),
-                                FirstName = reader.GetString(reader.GetOrdinal("first_name")),
-                                LastName = reader.GetString(reader.GetOrdinal("last_name")),
-                                Age = reader.GetInt32(reader.GetOrdinal("age")),
-                                Specialization = reader.GetString(reader.GetOrdinal("specialization")),
-                                Skills = reader.GetString(reader.GetOrdinal("skills")),
-                                CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at"))
-                            });
-                        }
+                            CandidateId = Convert.ToInt32(reader["candidate_id"]),
+                            FirstName = reader["first_name"].ToString(),
+                            LastName = reader["last_name"].ToString(),
+                            Age = Convert.ToInt32(reader["age"]),
+                            Specialization = reader["specialization"].ToString(),
+                            Skills = reader["skills"].ToString(),
+                            CreatedAt = Convert.ToDateTime(reader["created_at"])
+                        });
                     }
                 }
             }
@@ -113,7 +70,6 @@ namespace HRApplication.Database
             return candidates;
         }
 
-        // Вакансии
         public List<Vacancy> GetVacancies()
         {
             var vacancies = new List<Vacancy>();
@@ -129,13 +85,13 @@ namespace HRApplication.Database
                     {
                         vacancies.Add(new Vacancy
                         {
-                            VacancyId = reader.GetInt32(reader.GetOrdinal("vacancy_id")),
-                            Title = reader.GetString(reader.GetOrdinal("title")),
-                            Description = reader.GetString(reader.GetOrdinal("description")),
-                            RequiredSkills = reader.GetString(reader.GetOrdinal("required_skills")),
-                            MinAge = reader.GetInt32(reader.GetOrdinal("min_age")),
-                            MaxAge = reader.GetInt32(reader.GetOrdinal("max_age")),
-                            CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at"))
+                            VacancyId = Convert.ToInt32(reader["vacancy_id"]),
+                            Title = reader["title"].ToString(),
+                            Description = reader["description"].ToString(),
+                            RequiredSkills = reader["required_skills"].ToString(),
+                            MinAge = Convert.ToInt32(reader["min_age"]),
+                            MaxAge = Convert.ToInt32(reader["max_age"]),
+                            CreatedAt = Convert.ToDateTime(reader["created_at"])
                         });
                     }
                 }
@@ -148,7 +104,6 @@ namespace HRApplication.Database
             return vacancies;
         }
 
-        // Отклики для кандидата
         public List<JobApplication> GetApplicationsByCandidate(int candidateId)
         {
             var applications = new List<JobApplication>();
@@ -172,12 +127,12 @@ namespace HRApplication.Database
                         {
                             applications.Add(new JobApplication
                             {
-                                ApplicationId = reader.GetInt32(reader.GetOrdinal("application_id")),
-                                CandidateId = reader.GetInt32(reader.GetOrdinal("candidate_id")),
-                                VacancyId = reader.GetInt32(reader.GetOrdinal("vacancy_id")),
-                                AppliedAt = reader.GetDateTime(reader.GetOrdinal("applied_at")),
-                                Status = reader.GetString(reader.GetOrdinal("status")),
-                                VacancyTitle = reader.GetString(reader.GetOrdinal("vacancy_title"))
+                                ApplicationId = Convert.ToInt32(reader["application_id"]),
+                                CandidateId = Convert.ToInt32(reader["candidate_id"]),
+                                VacancyId = Convert.ToInt32(reader["vacancy_id"]),
+                                AppliedAt = Convert.ToDateTime(reader["applied_at"]),
+                                Status = reader["status"].ToString(),
+                                VacancyTitle = reader["vacancy_title"].ToString()
                             });
                         }
                     }
@@ -191,7 +146,7 @@ namespace HRApplication.Database
             return applications;
         }
 
-        // Все отклики
+        // ДОБАВЛЕННЫЙ МЕТОД GetAllApplications
         public List<JobApplication> GetAllApplications()
         {
             var applications = new List<JobApplication>();
@@ -212,13 +167,13 @@ namespace HRApplication.Database
                     {
                         applications.Add(new JobApplication
                         {
-                            ApplicationId = reader.GetInt32(reader.GetOrdinal("application_id")),
-                            CandidateId = reader.GetInt32(reader.GetOrdinal("candidate_id")),
-                            VacancyId = reader.GetInt32(reader.GetOrdinal("vacancy_id")),
-                            AppliedAt = reader.GetDateTime(reader.GetOrdinal("applied_at")),
-                            Status = reader.GetString(reader.GetOrdinal("status")),
-                            CandidateName = $"{reader.GetString(reader.GetOrdinal("first_name"))} {reader.GetString(reader.GetOrdinal("last_name"))}",
-                            VacancyTitle = reader.GetString(reader.GetOrdinal("vacancy_title"))
+                            ApplicationId = Convert.ToInt32(reader["application_id"]),
+                            CandidateId = Convert.ToInt32(reader["candidate_id"]),
+                            VacancyId = Convert.ToInt32(reader["vacancy_id"]),
+                            AppliedAt = Convert.ToDateTime(reader["applied_at"]),
+                            Status = reader["status"].ToString(),
+                            CandidateName = $"{reader["first_name"]} {reader["last_name"]}",
+                            VacancyTitle = reader["vacancy_title"].ToString()
                         });
                     }
                 }
