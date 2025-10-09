@@ -1,12 +1,14 @@
-﻿using System;
+﻿using HRApplication.Database;
+using HRApplication.Models;
+using HRApplication.Repositories;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
 using System.IO;
-using Newtonsoft.Json;
-using HRApplication.Database;
-using HRApplication.Models;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace HRApplication
 {
@@ -28,6 +30,7 @@ namespace HRApplication
         private Panel filtersPanel;
         private Timer filterTimer;
         private bool filtersPinned = false;
+        private Button btnTestRepository;
 
         // Элементы фильтров
         private TextBox txtSearch;
@@ -94,6 +97,7 @@ namespace HRApplication
                 Height = headerHeight,
                 BackColor = DesignColors.PrimaryColor
             };
+
 
             // Заголовок
             var lblTitle = new Label
@@ -171,6 +175,21 @@ namespace HRApplication
             btnExportCandidates.FlatAppearance.BorderSize = 0;
             btnExportCandidates.Click += BtnExportCandidates_Click;
 
+            btnTestRepository = new Button
+            {
+                Text = "Тест репозитория",
+                Size = new Size(120, 25),
+                Location = new Point(1060, 17), // Правее существующих кнопок
+                BackColor = Color.Orange,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnTestRepository.FlatAppearance.BorderSize = 0;
+            btnTestRepository.Click += btnTestRepository_Click;
+
+
             btnExportVacancies = new Button
             {
                 Text = "Экспорт вакансий",
@@ -199,7 +218,7 @@ namespace HRApplication
 
             headerPanel.Controls.AddRange(new Control[] {
                 lblTitle, btnSettings, lblViewType, cmbViewType,
-                btnToggleFilters, btnExportCandidates, btnExportVacancies, btnExportApplications
+                btnToggleFilters, btnExportCandidates, btnExportVacancies, btnExportApplications, btnTestRepository
             });
         }
 
@@ -859,6 +878,67 @@ namespace HRApplication
             {
                 MessageBox.Show($"Ошибка при экспорте: {ex.Message}", "Ошибка",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void btnTestRepository_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                btnTestRepository.Enabled = false;
+                btnTestRepository.Text = "Тестирование...";
+
+                if (databaseHelper != null && databaseHelper.IsConnected())
+                {
+                    // ✅ ИСПОЛЬЗУЕМ СОХРАНЕННУЮ СТРОКУ ПОДКЛЮЧЕНИЯ
+                    string currentConnectionString = ModernConnectionForm.CurrentConnectionString;
+
+                    // Показываем какую строку используем (без пароля для безопасности)
+                    string safeConnectionString = currentConnectionString;
+                    if (!string.IsNullOrEmpty(safeConnectionString))
+                    {
+                        // Скрываем пароль в отладочном сообщении
+                        int passwordIndex = safeConnectionString.IndexOf("Password=");
+                        if (passwordIndex >= 0)
+                        {
+                            int semicolonIndex = safeConnectionString.IndexOf(';', passwordIndex);
+                            if (semicolonIndex == -1) semicolonIndex = safeConnectionString.Length;
+                            string passwordPart = safeConnectionString.Substring(passwordIndex, semicolonIndex - passwordIndex);
+                            safeConnectionString = safeConnectionString.Replace(passwordPart, "Password=***");
+                        }
+                    }
+
+                    MessageBox.Show($"Используем сохраненное подключение:\n{safeConnectionString}",
+                                  "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    var repository = new CandidateRepository(currentConnectionString);
+                    var repositoryCandidates = await repository.GetAllCandidatesAsync();
+
+                    // Сравниваем со старым методом
+                    var oldCandidates = databaseHelper.GetCandidates();
+
+                    MessageBox.Show($"✅ Репозиторий работает!\n\n" +
+                                  $"Старый DatabaseHelper: {oldCandidates.Count} кандидатов\n" +
+                                  $"Новый репозиторий: {repositoryCandidates.Count} кандидатов\n\n" +
+                                  $"Результаты совпадают: {oldCandidates.Count == repositoryCandidates.Count}",
+                                  "Тест репозитория - УСПЕХ",
+                                  MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show("❌ Сначала подключитесь к базе данных!", "Ошибка",
+                                  MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"❌ Ошибка тестирования: {ex.Message}", "Ошибка",
+                              MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnTestRepository.Enabled = true;
+                btnTestRepository.Text = "Тест репозитория";
             }
         }
 

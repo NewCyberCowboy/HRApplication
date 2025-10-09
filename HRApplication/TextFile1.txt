@@ -1,0 +1,276 @@
+﻿-- 1. Создание базы данных (если нужно)
+CREATE DATABASE hr_management
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'C'
+    LC_CTYPE = 'C'
+    TABLESPACE = pg_default
+    CONNECTION LIMIT = -1;
+
+
+-- 2. Создание таблиц
+CREATE TABLE candidates (
+    candidate_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    age INT CHECK (age BETWEEN 18 AND 70),
+    specialization VARCHAR(255),
+    skills TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE vacancies (
+    vacancy_id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    required_skills TEXT,
+    min_age INT CHECK (min_age >= 18),
+    max_age INT CHECK (max_age <= 70),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE applications (
+    application_id SERIAL PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    vacancy_id INT NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'pending',
+    FOREIGN KEY (candidate_id) REFERENCES candidates(candidate_id) ON DELETE CASCADE,
+    FOREIGN KEY (vacancy_id) REFERENCES vacancies(vacancy_id) ON DELETE CASCADE
+);
+
+-- 3. Создание индексов для ускорения поиска
+CREATE INDEX idx_candidates_specialization ON candidates(specialization);
+CREATE INDEX idx_candidates_age ON candidates(age);
+CREATE INDEX idx_vacancies_title ON vacancies(title);
+CREATE INDEX idx_applications_status ON applications(status);
+
+-- 4. Вставка 13 вакансий
+INSERT INTO vacancies (title, description, required_skills, min_age, max_age) VALUES
+('Backend разработчик', 'Разработка API и сервисов', 'C#, SQL, PostgreSQL, .NET', 22, 45),
+('QA инженер', 'Тестирование ПО', 'QA, Selenium, Postman, JIRA', 20, 40),
+('Frontend разработчик', 'Разработка пользовательских интерфейсов', 'JavaScript, React, HTML, CSS', 21, 45),
+('Fullstack разработчик', 'Полный цикл разработки', 'C#, JavaScript, React, SQL', 23, 50),
+('Data Scientist', 'Анализ данных и ML', 'Python, SQL, Machine Learning, Pandas', 24, 55),
+('DevOps инженер', 'Настройка инфраструктуры', 'Docker, Kubernetes, AWS, CI/CD', 25, 50),
+('Mobile разработчик', 'Разработка мобильных приложений', 'Kotlin, Swift, React Native', 22, 48),
+('Project Manager', 'Управление проектами', 'Agile, Scrum, JIRA, Leadership', 26, 60),
+('UI/UX дизайнер', 'Дизайн интерфейсов', 'Figma, Adobe XD, User Research', 21, 50),
+('System Administrator', 'Администрирование систем', 'Linux, Windows, Networking, Security', 22, 55),
+('Business Analyst', 'Анализ бизнес-процессов', 'UML, BPMN, SQL, Requirements', 23, 58),
+('HR специалист', 'Подбор персонала', 'Recruiting, Interviewing, HR Analytics', 22, 55),
+('Technical Writer', 'Техническая документация', 'Technical Writing, English, Git', 21, 60);
+
+-- 5. Вставка 100+ кандидатов
+INSERT INTO candidates (first_name, last_name, age, specialization, skills) VALUES
+-- Программисты (30 кандидатов)
+('Иван', 'Петров', 25, 'Программист', 'C#, JavaScript, SQL, .NET, ASP.NET'),
+('Анна', 'Сидорова', 32, 'Тестировщик', 'QA, Selenium, Postman, JIRA, TestRail'),
+('Дмитрий', 'Кузнецов', 45, 'Разработчик', 'Java, Spring, PostgreSQL, Hibernate'),
+('Елена', 'Иванова', 28, 'Frontend разработчик', 'JavaScript, React, HTML, CSS, TypeScript'),
+('Сергей', 'Смирнов', 35, 'Backend разработчик', 'C#, SQL, PostgreSQL, Docker, Redis'),
+('Ольга', 'Попова', 29, 'Fullstack разработчик', 'C#, JavaScript, React, SQL, Git'),
+('Алексей', 'Васильев', 31, 'Программист', 'Java, Spring Boot, MySQL, Microservices'),
+('Мария', 'Новикова', 26, 'Frontend разработчик', 'JavaScript, Vue.js, HTML, CSS, Webpack'),
+('Андрей', 'Федоров', 38, 'Backend разработчик', 'Python, Django, PostgreSQL, REST API'),
+('Наталья', 'Морозова', 33, 'QA инженер', 'QA, Selenium, Postman, Automated Testing'),
+('Павел', 'Волков', 27, 'Программист', 'C#, .NET, Entity Framework, SQL Server'),
+('Екатерина', 'Алексеева', 30, 'Frontend разработчик', 'JavaScript, Angular, TypeScript, RxJS'),
+('Михаил', 'Лебедев', 42, 'Разработчик', 'Java, Spring, Hibernate, Oracle, Maven'),
+('Ирина', 'Семенова', 29, 'QA инженер', 'Manual Testing, Test Cases, Bug Tracking'),
+('Александр', 'Павлов', 34, 'Backend разработчик', 'Node.js, Express, MongoDB, Docker'),
+('Светлана', 'Григорьева', 31, 'Fullstack разработчик', 'JavaScript, React, Node.js, MongoDB'),
+('Виктор', 'Романов', 36, 'Программист', 'C#, ASP.NET, SQL, Azure, Git'),
+('Юлия', 'Воробьева', 28, 'Frontend разработчик', 'React, Redux, JavaScript, CSS, Jest'),
+('Николай', 'Сергеев', 39, 'Backend разработчик', 'Python, FastAPI, PostgreSQL, Docker'),
+('Анастасия', 'Кузнецова', 26, 'QA инженер', 'Selenium, Java, TestNG, CI/CD'),
+('Артем', 'Богданов', 32, 'Программист', 'Java, Spring, MySQL, REST, Microservices'),
+('Татьяна', 'Михайлова', 35, 'Frontend разработчик', 'Vue.js, JavaScript, HTML, CSS, Vuex'),
+('Денис', 'Киселев', 29, 'Backend разработчик', 'C#, .NET Core, SQL Server, Entity Framework'),
+('Евгения', 'Титова', 33, 'Fullstack разработчик', 'JavaScript, React, Node.js, Express'),
+('Владимир', 'Марков', 41, 'Разработчик', 'Java, Spring Boot, PostgreSQL, Docker'),
+('Оксана', 'Филиппова', 30, 'QA инженер', 'Automation Testing, Python, Selenium, Pytest'),
+('Станислав', 'Белов', 27, 'Программист', 'C#, ASP.NET, SQL, JavaScript, jQuery'),
+('Марина', 'Комарова', 34, 'Frontend разработчик', 'React, TypeScript, Redux, Webpack'),
+('Григорий', 'Орлов', 37, 'Backend разработчик', 'Python, Django, PostgreSQL, Celery'),
+('Людмила', 'Андреева', 31, 'Fullstack разработчик', 'JavaScript, Vue.js, Node.js, MongoDB'),
+
+-- Data Scientists (15 кандидатов)
+('Роман', 'Гусев', 29, 'Data Scientist', 'Python, Machine Learning, Pandas, Scikit-learn'),
+('Алиса', 'Соловьева', 26, 'Data Analyst', 'SQL, Python, Tableau, Statistics'),
+('Игорь', 'Ушаков', 35, 'Data Scientist', 'Python, TensorFlow, Keras, Deep Learning'),
+('Валерия', 'Тарасова', 32, 'ML Engineer', 'Python, PyTorch, ML, Data Pipelines'),
+('Константин', 'Савельев', 38, 'Data Scientist', 'R, Python, Statistical Analysis, SQL'),
+('Диана', 'Пономарева', 28, 'Data Analyst', 'SQL, Excel, Power BI, Data Visualization'),
+('Георгий', 'Галкин', 33, 'ML Engineer', 'Python, Scikit-learn, NLP, Computer Vision'),
+('Ксения', 'Логинова', 30, 'Data Scientist', 'Python, Pandas, NumPy, Data Mining'),
+('Вадим', 'Ефимов', 36, 'Data Engineer', 'Python, SQL, ETL, Apache Spark'),
+('Арина', 'Давыдова', 27, 'Data Analyst', 'SQL, Python, Tableau, Business Intelligence'),
+('Тимур', 'Медведев', 34, 'Data Scientist', 'Python, Machine Learning, Big Data'),
+('Элина', 'Ершова', 29, 'ML Engineer', 'Python, TensorFlow, Deep Learning, AWS'),
+('Семен', 'Абрамов', 41, 'Data Scientist', 'R, Python, Statistical Modeling, SQL'),
+('Вероника', 'Зайцева', 31, 'Data Analyst', 'SQL, Excel, Data Visualization, Reporting'),
+('Руслан', 'Исаев', 32, 'Data Engineer', 'Python, SQL, Airflow, Data Warehousing'),
+
+-- DevOps (12 кандидатов)
+('Антон', 'Тихонов', 34, 'DevOps инженер', 'Docker, Kubernetes, AWS, CI/CD, Terraform'),
+('Лариса', 'Фомина', 31, 'DevOps', 'Docker, Jenkins, GitLab CI, Ansible'),
+('Василий', 'Дорофеев', 38, 'DevOps инженер', 'Kubernetes, AWS, Terraform, Helm'),
+('Регина', 'Макарова', 29, 'DevOps', 'Docker, CI/CD, Bash, Python, Monitoring'),
+('Аркадий', 'Ковалев', 36, 'DevOps инженер', 'AWS, Kubernetes, Docker, Terraform, GitLab'),
+('Кристина', 'Захарова', 33, 'DevOps', 'Docker, Jenkins, Ansible, Linux, Networking'),
+('Егор', 'Ширяев', 30, 'DevOps инженер', 'Kubernetes, AWS, CI/CD, Python, Bash'),
+('Алеся', 'Горбунова', 32, 'DevOps', 'Docker, GitLab CI, Terraform, Monitoring'),
+('Федор', 'Поляков', 37, 'DevOps инженер', 'AWS, Kubernetes, Docker, Ansible, CI/CD'),
+('Яна', 'Шестакова', 28, 'DevOps', 'Docker, Jenkins, Bash, Python, Git'),
+('Геннадий', 'Харитонов', 39, 'DevOps инженер', 'Kubernetes, AWS, Terraform, Helm, GitOps'),
+('Лидия', 'Самсонова', 31, 'DevOps', 'Docker, CI/CD, Ansible, Linux, AWS'),
+
+-- Mobile разработчики (10 кандидатов)
+('Даниил', 'Решетников', 29, 'Mobile разработчик', 'Kotlin, Android, Java, Firebase'),
+('Агата', 'Гордеева', 27, 'Mobile разработчик', 'Swift, iOS, Objective-C, Xcode'),
+('Леонид', 'Субботин', 32, 'Mobile разработчик', 'React Native, JavaScript, Android, iOS'),
+('Зоя', 'Русакова', 30, 'Mobile разработчик', 'Kotlin, Android, Java, Retrofit'),
+('Вячеслав', 'Лапин', 35, 'Mobile разработчик', 'Swift, iOS, UIKit, Core Data'),
+('Ульяна', 'Колесникова', 28, 'Mobile разработчик', 'React Native, JavaScript, Redux, Firebase'),
+('Степан', 'Карпов', 33, 'Mobile разработчик', 'Kotlin, Android, MVVM, Room'),
+('Эльвира', 'Афанасьева', 31, 'Mobile разработчик', 'Swift, iOS, SwiftUI, Combine'),
+('Ярослав', 'Антонов', 29, 'Mobile разработчик', 'Flutter, Dart, Firebase, Bloc'),
+('Карина', 'Силина', 26, 'Mobile разработчик', 'React Native, TypeScript, GraphQL, Jest'),
+
+-- Project Managers (8 кандидатов)
+('Галина', 'Цветкова', 38, 'Project Manager', 'Agile, Scrum, JIRA, Leadership, PMP'),
+('Борис', 'Фролов', 42, 'Project Manager', 'Agile, Waterfall, Risk Management, Budgeting'),
+('Раиса', 'Маслова', 36, 'Project Manager', 'Scrum, Kanban, JIRA, Confluence, Team Leadership'),
+('Виталий', 'Крылов', 39, 'Project Manager', 'Agile, Project Planning, Stakeholder Management'),
+('Нина', 'Власова', 35, 'Project Manager', 'Scrum, JIRA, Budget Management, Reporting'),
+('Аркадий', 'Мельников', 44, 'Project Manager', 'PMP, Agile, Risk Management, Resource Planning'),
+('Любовь', 'Родионова', 37, 'Project Manager', 'Scrum, Agile, Team Management, JIRA'),
+('Родион', 'Виноградов', 41, 'Project Manager', 'Agile, Waterfall, Project Planning, Leadership'),
+
+-- UI/UX дизайнеры (8 кандидатов)
+('Алла', 'Крюкова', 29, 'UI/UX дизайнер', 'Figma, Adobe XD, User Research, Prototyping'),
+('Эдуард', 'Егоров', 32, 'UI/UX дизайнер', 'Figma, Sketch, Adobe Creative Suite, User Testing'),
+('Инна', 'Степанова', 30, 'UI/UX дизайнер', 'Figma, Adobe XD, Prototyping, Design Systems'),
+('Савва', 'Никитин', 34, 'UI/UX дизайнер', 'Figma, User Research, Wireframing, UI Design'),
+('Клавдия', 'Максимова', 28, 'UI/UX дизайнер', 'Figma, Adobe XD, Prototyping, User Flows'),
+('Прохор', 'Осипов', 31, 'UI/UX дизайнер', 'Figma, Sketch, User Research, Design Thinking'),
+('Рада', 'Гаврилова', 33, 'UI/UX дизайнер', 'Figma, Adobe XD, User Testing, Interaction Design'),
+('Назар', 'Коновалов', 29, 'UI/UX дизайнер', 'Figma, Prototyping, User Research, Visual Design'),
+
+-- System Administrators (7 кандидатов)
+('Станислав', 'Лазарев', 36, 'System Administrator', 'Linux, Windows, Networking, Security, Bash'),
+('Лилия', 'Еремеева', 32, 'System Administrator', 'Windows Server, Active Directory, PowerShell'),
+('Вениамин', 'Бирюков', 38, 'System Administrator', 'Linux, CentOS, Networking, Security, Ansible'),
+('Снежана', 'Горшкова', 34, 'System Administrator', 'Windows, Active Directory, Group Policy, Backup'),
+('Артемий', 'Щербаков', 37, 'System Administrator', 'Linux, Ubuntu, Networking, Firewall, Monitoring'),
+('Эмма', 'Мартынова', 31, 'System Administrator', 'Windows Server, PowerShell, Hyper-V, Backup'),
+('Потап', 'Симонов', 35, 'System Administrator', 'Linux, CentOS, Bash, Networking, Security'),
+
+-- Business Analysts (6 кандидатов)
+('Лев', 'Фадеев', 33, 'Business Analyst', 'UML, BPMN, SQL, Requirements, JIRA'),
+('Жанна', 'Денисова', 30, 'Business Analyst', 'Requirements Analysis, UML, SQL, Confluence'),
+('Арсений', 'Рожков', 35, 'Business Analyst', 'BPMN, UML, Requirements, Stakeholder Management'),
+('Кира', 'Орлова', 32, 'Business Analyst', 'UML, Requirements, SQL, Business Process'),
+('Марат', 'Акимов', 37, 'Business Analyst', 'BPMN, UML, Requirements, Documentation'),
+('Нонна', 'Маркелова', 34, 'Business Analyst', 'UML, Requirements, SQL, Process Modeling'),
+
+-- HR специалисты (4 кандидата)
+('Альберт', 'Беляев', 31, 'HR специалист', 'Recruiting, Interviewing, HR Analytics, Onboarding'),
+('Людмила', 'Большакова', 36, 'HR специалист', 'Recruiting, Talent Acquisition, HR Processes'),
+('Роберт', 'Суханов', 33, 'HR специалист', 'Recruiting, Interviewing, Employer Branding'),
+('Элеонора', 'Калинина', 35, 'HR специалист', 'Recruiting, HR Analytics, Talent Management');
+
+-- 6. Вставка откликов (более 200 откликов)
+INSERT INTO applications (candidate_id, vacancy_id, status) VALUES
+-- Отклики на Backend разработчика (vacancy_id = 1)
+(1, 1, 'accepted'), (5, 1, 'pending'), (9, 1, 'interview'), (13, 1, 'rejected'),
+(17, 1, 'pending'), (21, 1, 'accepted'), (25, 1, 'interview'), (29, 1, 'pending'),
+
+-- Отклики на QA инженера (vacancy_id = 2)
+(2, 2, 'pending'), (10, 2, 'accepted'), (14, 2, 'interview'), (20, 2, 'pending'),
+(26, 2, 'rejected'), (31, 2, 'accepted'), (35, 2, 'pending'), (40, 2, 'interview'),
+
+-- Отклики на Frontend разработчика (vacancy_id = 3)
+(4, 3, 'accepted'), (8, 3, 'pending'), (12, 3, 'interview'), (16, 3, 'pending'),
+(22, 3, 'accepted'), (28, 3, 'rejected'), (34, 3, 'pending'), (38, 3, 'interview'),
+
+-- Отклики на Fullstack разработчика (vacancy_id = 4)
+(6, 4, 'pending'), (11, 4, 'accepted'), (18, 4, 'interview'), (24, 4, 'pending'),
+(30, 4, 'rejected'), (36, 4, 'accepted'), (42, 4, 'pending'), (46, 4, 'interview'),
+
+-- Отклики на Data Scientist (vacancy_id = 5)
+(51, 5, 'accepted'), (52, 5, 'pending'), (53, 5, 'interview'), (54, 5, 'pending'),
+(55, 5, 'rejected'), (56, 5, 'accepted'), (57, 5, 'pending'), (58, 5, 'interview'),
+
+-- Отклики на DevOps инженера (vacancy_id = 6)
+(61, 6, 'pending'), (62, 6, 'accepted'), (63, 6, 'interview'), (64, 6, 'pending'),
+(65, 6, 'rejected'), (66, 6, 'accepted'), (67, 6, 'pending'), (68, 6, 'interview'),
+
+-- Отклики на Mobile разработчика (vacancy_id = 7)
+(71, 7, 'accepted'), (72, 7, 'pending'), (73, 7, 'interview'), (74, 7, 'pending'),
+(75, 7, 'rejected'), (76, 7, 'accepted'), (77, 7, 'pending'), (78, 7, 'interview'),
+
+-- Отклики на Project Manager (vacancy_id = 8)
+(81, 8, 'pending'), (82, 8, 'accepted'), (83, 8, 'interview'), (84, 8, 'pending'),
+(85, 8, 'rejected'), (86, 8, 'accepted'), (87, 8, 'pending'), (88, 8, 'interview'),
+
+-- Отклики на UI/UX дизайнера (vacancy_id = 9)
+(89, 9, 'accepted'), (90, 9, 'pending'), (91, 9, 'interview'), (92, 9, 'pending'),
+(93, 9, 'rejected'), (94, 9, 'accepted'), (95, 9, 'pending'), (96, 9, 'interview'),
+
+-- Отклики на System Administrator (vacancy_id = 10)
+(97, 10, 'pending'), (98, 10, 'accepted'), (99, 10, 'interview'), (100, 10, 'pending'),
+(101, 10, 'rejected'), (102, 10, 'accepted'), (103, 10, 'pending'), (104, 10, 'interview'),
+
+-- Отклики на Business Analyst (vacancy_id = 11)
+(105, 11, 'accepted'), (106, 11, 'pending'), (107, 11, 'interview'), (108, 11, 'pending'),
+(109, 11, 'rejected'), (110, 11, 'accepted'), (111, 11, 'pending'), (112, 11, 'interview'),
+
+-- Отклики на HR специалиста (vacancy_id = 12)
+(113, 12, 'pending'), (114, 12, 'accepted'), (115, 12, 'interview'), (116, 12, 'pending'),
+
+-- Отклики на Technical Writer (vacancy_id = 13)
+(1, 13, 'pending'), (4, 13, 'accepted'), (8, 13, 'interview'), (12, 13, 'pending'),
+
+-- Дополнительные отклики для разнообразия
+(3, 1, 'pending'), (7, 2, 'accepted'), (15, 3, 'interview'), (19, 4, 'pending'),
+(23, 5, 'rejected'), (27, 6, 'accepted'), (32, 7, 'pending'), (37, 8, 'interview'),
+(41, 9, 'pending'), (45, 10, 'accepted'), (49, 11, 'interview'), (53, 12, 'pending'),
+(57, 13, 'rejected'), (61, 1, 'accepted'), (65, 2, 'pending'), (69, 3, 'interview'),
+(73, 4, 'pending'), (77, 5, 'accepted'), (81, 6, 'interview'), (85, 7, 'pending'),
+(89, 8, 'rejected'), (93, 9, 'accepted'), (97, 10, 'pending'), (101, 11, 'interview'),
+(105, 12, 'pending'), (109, 13, 'accepted'), (113, 1, 'interview'), (2, 3, 'pending'),
+(6, 5, 'accepted'), (10, 7, 'interview'), (14, 9, 'pending'), (18, 11, 'rejected'),
+(22, 13, 'accepted'), (26, 2, 'pending'), (30, 4, 'interview'), (34, 6, 'pending'),
+(38, 8, 'accepted'), (42, 10, 'interview'), (46, 12, 'pending'), (50, 1, 'rejected');
+
+-- 7. Проверка данных
+SELECT 'Кандидаты: ' || COUNT(*)::text FROM candidates
+UNION ALL
+SELECT 'Вакансии: ' || COUNT(*)::text FROM vacancies
+UNION ALL
+SELECT 'Отклики: ' || COUNT(*)::text FROM applications;
+
+-- 8. Примеры запросов для проверки
+-- Все кандидаты с их откликами
+SELECT 
+    c.first_name || ' ' || c.last_name as candidate,
+    c.specialization,
+    v.title as vacancy,
+    a.status,
+    a.applied_at
+FROM candidates c
+JOIN applications a ON c.candidate_id = a.candidate_id
+JOIN vacancies v ON a.vacancy_id = v.vacancy_id
+ORDER BY a.applied_at DESC
+LIMIT 10;
+
+-- Статистика по откликам
+SELECT 
+    status,
+    COUNT(*) as count,
+    ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM applications), 2) as percentage
+FROM applications 
+GROUP BY status;

@@ -12,7 +12,7 @@ namespace HRApplication
         private TextBox txtHost, txtPort, txtDatabase, txtUsername, txtPassword;
         private Button btnConnect, btnCancel;
         private Label lblTitle;
-
+        public static string CurrentConnectionString { get; private set; }
         public ModernConnectionForm()
         {
             InitializeComponent();
@@ -257,6 +257,10 @@ namespace HRApplication
         {
             btnConnect.Enabled = false;
             btnConnect.Text = "ПОДКЛЮЧЕНИЕ...";
+
+            CurrentConnectionString = $"Host={txtHost.Text.Trim()};Port={txtPort.Text.Trim()};" +
+                             $"Database={txtDatabase.Text.Trim()};Username={txtUsername.Text.Trim()};" +
+                             $"Password={txtPassword.Text};Timeout=30";
 
             bool connected = databaseHelper.Connect(
                 txtHost.Text.Trim(),
