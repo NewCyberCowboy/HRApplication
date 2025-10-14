@@ -1,9 +1,12 @@
-﻿using HRApplication.Database;
+﻿using ClosedXML.Excel;
+using HRApplication.Database;
 using HRApplication.Models;
 using HRApplication.Repositories;
 using Newtonsoft.Json;
+using Npgsql;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -41,25 +44,35 @@ namespace HRApplication
         private Label lblMinAge;
         private Label lblMaxAge;
         private Label lblAgeRange;
+        private ComboBox cmbSearchType; 
+
+        // Пагинация
+        private int currentPage = 1;
+        private int pageSize = 50;
+        private Label lblPageInfo;
+        private Button btnPrevPage, btnNextPage;
+        private int totalItems = 0;
+        private ComboBox cmbPageSize;
+
 
         // Высота элементов для динамического расчета
         private int headerHeight = 60;
-        private int filtersHeight = 90;
-
+        private int filtersHeight = 120; 
+        
         public ModernMainForm(DatabaseHelper dbHelper)
         {
             databaseHelper = dbHelper;
-            InitializeComponent();
+            InitializeCustomComponent();
             InitializeFilterTimer();
             LoadData();
             ApplyTheme();
         }
 
-        private void InitializeComponent()
+        private void InitializeCustomComponent()
         {
             this.SuspendLayout();
 
-            // Основные настройки формы
+            
             this.Text = "HR Management System";
             this.WindowState = FormWindowState.Maximized;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -71,13 +84,13 @@ namespace HRApplication
             CreateMainContentPanel();
             CreateCandidateCardPanel();
 
-            // Правильно упорядочиваем элементы (важен порядок!)
+            
             this.Controls.Add(mainContentPanel);
             this.Controls.Add(filtersPanel);
             this.Controls.Add(candidateCardPanel);
             this.Controls.Add(headerPanel);
 
-            UpdateLayout(); // Первоначальное расположение
+            UpdateLayout();
 
             this.ResumeLayout(false);
         }
@@ -98,7 +111,6 @@ namespace HRApplication
                 BackColor = DesignColors.PrimaryColor
             };
 
-
             // Заголовок
             var lblTitle = new Label
             {
@@ -110,7 +122,7 @@ namespace HRApplication
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
-            // Кнопка настроек (шестеренка) - ПРАВЫЙ ВЕРХНИЙ УГОЛ
+            // Кнопка настроек
             btnSettings = new Button
             {
                 Text = "⚙",
@@ -161,12 +173,12 @@ namespace HRApplication
             btnToggleFilters.FlatAppearance.BorderSize = 0;
             btnToggleFilters.Click += BtnToggleFilters_Click;
 
-            // Кнопки экспорта
+            // Кнопки экспорта в Excel
             btnExportCandidates = new Button
             {
-                Text = "Экспорт кандидатов",
+                Text = "Excel кандидаты",
                 Size = new Size(120, 25),
-                Location = new Point(670, 17),
+                Location = new Point(650, 17),
                 BackColor = DesignColors.SuccessColor,
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8),
@@ -175,26 +187,11 @@ namespace HRApplication
             btnExportCandidates.FlatAppearance.BorderSize = 0;
             btnExportCandidates.Click += BtnExportCandidates_Click;
 
-            btnTestRepository = new Button
-            {
-                Text = "Тест репозитория",
-                Size = new Size(120, 25),
-                Location = new Point(1060, 17), // Правее существующих кнопок
-                BackColor = Color.Orange,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 8),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
-            };
-            btnTestRepository.FlatAppearance.BorderSize = 0;
-            btnTestRepository.Click += btnTestRepository_Click;
-
-
             btnExportVacancies = new Button
             {
-                Text = "Экспорт вакансий",
+                Text = "Excel вакансии",
                 Size = new Size(120, 25),
-                Location = new Point(800, 17),
+                Location = new Point(780, 17),
                 BackColor = DesignColors.SuccessColor,
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8),
@@ -205,9 +202,9 @@ namespace HRApplication
 
             btnExportApplications = new Button
             {
-                Text = "Экспорт откликов",
+                Text = "Excel отклики",
                 Size = new Size(120, 25),
-                Location = new Point(930, 17),
+                Location = new Point(910, 17),
                 BackColor = DesignColors.SuccessColor,
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8),
@@ -216,9 +213,85 @@ namespace HRApplication
             btnExportApplications.FlatAppearance.BorderSize = 0;
             btnExportApplications.Click += BtnExportApplications_Click;
 
+            btnTestRepository = new Button
+            {
+                Text = "Тест репозитория",
+                Size = new Size(120, 25),
+                Location = new Point(1040, 17),
+                BackColor = Color.Orange,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnTestRepository.FlatAppearance.BorderSize = 0;
+            btnTestRepository.Click += BtnTestRepository_Click;
+
             headerPanel.Controls.AddRange(new Control[] {
                 lblTitle, btnSettings, lblViewType, cmbViewType,
-                btnToggleFilters, btnExportCandidates, btnExportVacancies, btnExportApplications, btnTestRepository
+                btnToggleFilters, btnExportCandidates, btnExportVacancies,
+                btnExportApplications, btnTestRepository
+            });
+            // Элементы пагинации
+            var lblPageSize = new Label
+            {
+                Text = "На странице:",
+                Font = new Font("Segoe UI", 8),
+                ForeColor = Color.White,
+                Size = new Size(100, 20),
+                Location = new Point(1200, 20)
+            };
+
+            cmbPageSize = new ComboBox
+            {
+                Size = new Size(60, 25),
+                Location = new Point(1300, 17),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 8)
+            };
+            cmbPageSize.Items.AddRange(new object[] { 20, 50, 100, 200 });
+            cmbPageSize.SelectedItem = 50;
+            cmbPageSize.SelectedIndexChanged += CmbPageSize_SelectedIndexChanged;
+
+            btnPrevPage = new Button
+            {
+                Text = "◀",
+                Size = new Size(30, 25),
+                Location = new Point(1400, 17),
+                BackColor = DesignColors.SecondaryColor,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnPrevPage.FlatAppearance.BorderSize = 0;
+            btnPrevPage.Click += BtnPrevPage_Click;
+
+            lblPageInfo = new Label
+            {
+                Text = "Страница 1",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.White,
+                Size = new Size(100, 20),
+                Location = new Point(1430, 20),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            btnNextPage = new Button
+            {
+                Text = "▶",
+                Size = new Size(30, 25),
+                Location = new Point(1530, 17),
+                BackColor = DesignColors.SecondaryColor,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnNextPage.FlatAppearance.BorderSize = 0;
+            btnNextPage.Click += BtnNextPage_Click;
+
+            
+            headerPanel.Controls.AddRange(new Control[] {
+        lblPageSize, cmbPageSize, btnPrevPage, lblPageInfo, btnNextPage
             });
         }
 
@@ -230,51 +303,81 @@ namespace HRApplication
                 BackColor = DesignColors.CardColor,
                 Visible = false,
                 BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(5)
+                Padding = new Padding(10)
             };
+
+            int yPos = 15;
+
+            // Тип поиска
+            var lblSearchType = new Label
+            {
+                Text = "Искать в:",
+                Location = new Point(10, yPos),
+                Size = new Size(70, 20),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = DesignColors.TextColor
+            };
+
+            cmbSearchType = new ComboBox
+            {
+                Location = new Point(85, yPos - 3),
+                Size = new Size(130, 25),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9)
+            };
+            cmbSearchType.Items.AddRange(new[] { "Навыках", "Имени", "Специализации", "Вакансиях", "Статусе отклика" });
+            cmbSearchType.SelectedIndex = 0;
+            cmbSearchType.SelectedIndexChanged += OnFilterChanged;
 
             // Поиск
             var lblSearch = new Label
             {
                 Text = "Поиск:",
-                Location = new Point(10, 15),
+                Location = new Point(230, yPos),
                 Size = new Size(50, 20),
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 ForeColor = DesignColors.TextColor
             };
-            txtSearch = new TextBox { Location = new Point(60, 12), Size = new Size(150, 25), Font = new Font("Segoe UI", 9) };
+            txtSearch = new TextBox
+            {
+                Location = new Point(285, yPos - 3),
+                Size = new Size(180, 25),
+                Font = new Font("Segoe UI", 9)
+            };
             txtSearch.TextChanged += OnFilterChanged;
 
             // Специализация
             var lblSpecialization = new Label
             {
                 Text = "Специализация:",
-                Location = new Point(220, 15),
-                Size = new Size(80, 20),
-                Font = new Font("Segoe UI", 9),
+                Location = new Point(480, yPos),
+                Size = new Size(90, 20),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 ForeColor = DesignColors.TextColor
             };
             cmbSpecialization = new ComboBox
             {
-                Location = new Point(305, 12),
+                Location = new Point(575, yPos - 3),
                 Size = new Size(150, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 9)
             };
             cmbSpecialization.SelectedIndexChanged += OnFilterChanged;
 
+            yPos += 40;
+
             // Вакансия
             var lblVacancy = new Label
             {
                 Text = "Вакансия:",
-                Location = new Point(465, 15),
-                Size = new Size(60, 20),
-                Font = new Font("Segoe UI", 9),
+                Location = new Point(10, yPos),
+                Size = new Size(70, 20),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 ForeColor = DesignColors.TextColor
             };
             cmbVacancy = new ComboBox
             {
-                Location = new Point(530, 12),
+                Location = new Point(85, yPos - 3),
                 Size = new Size(150, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 9)
@@ -285,24 +388,24 @@ namespace HRApplication
             lblAgeRange = new Label
             {
                 Text = "Возраст: 18 - 70",
-                Location = new Point(10, 50),
+                Location = new Point(250, yPos),
                 Size = new Size(100, 20),
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 ForeColor = DesignColors.TextColor
             };
 
             lblMinAge = new Label
             {
                 Text = "18",
-                Location = new Point(120, 50),
+                Location = new Point(355, yPos),
                 Size = new Size(30, 20),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = DesignColors.TextColor
             };
             trackBarMinAge = new TrackBar
             {
-                Location = new Point(150, 45),
-                Size = new Size(200, 30),
+                Location = new Point(385, yPos - 5),
+                Size = new Size(150, 30),
                 Minimum = 18,
                 Maximum = 70,
                 Value = 18
@@ -312,45 +415,30 @@ namespace HRApplication
             lblMaxAge = new Label
             {
                 Text = "70",
-                Location = new Point(360, 50),
+                Location = new Point(545, yPos),
                 Size = new Size(30, 20),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = DesignColors.TextColor
             };
             trackBarMaxAge = new TrackBar
             {
-                Location = new Point(390, 45),
-                Size = new Size(200, 30),
+                Location = new Point(575, yPos - 5),
+                Size = new Size(150, 30),
                 Minimum = 18,
                 Maximum = 70,
                 Value = 70
             };
             trackBarMaxAge.Scroll += OnAgeFilterChanged;
 
-            // Кнопка закрепления
-            var btnPin = new Button
-            {
-                Text = "Закрепить",
-                Location = new Point(600, 45),
-                Size = new Size(80, 25),
-                BackColor = DesignColors.SecondaryColor,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 8),
-                FlatStyle = FlatStyle.Flat
-            };
-            btnPin.FlatAppearance.BorderSize = 0;
-            btnPin.Click += BtnPin_Click;
-
             filtersPanel.Controls.AddRange(new Control[] {
-                lblSearch, txtSearch, lblSpecialization, cmbSpecialization,
-                lblVacancy, cmbVacancy, lblAgeRange, lblMinAge, trackBarMinAge,
-                lblMaxAge, trackBarMaxAge, btnPin
+                lblSearchType, cmbSearchType, lblSearch, txtSearch,
+                lblSpecialization, cmbSpecialization, lblVacancy, cmbVacancy,
+                lblAgeRange, lblMinAge, trackBarMinAge, lblMaxAge, trackBarMaxAge
             });
         }
 
         private void CreateMainContentPanel()
         {
-            // Основная панель контента
             mainContentPanel = new Panel
             {
                 BackColor = DesignColors.BackgroundColor
@@ -388,7 +476,6 @@ namespace HRApplication
 
         private void CreateCandidateCardPanel()
         {
-            // Панель карточки кандидата (изначально скрыта)
             candidateCardPanel = new Panel
             {
                 Width = 350,
@@ -399,7 +486,35 @@ namespace HRApplication
             };
         }
 
-        // === ДИНАМИЧЕСКОЕ РАСПОЛОЖЕНИЕ ===
+        private void BtnPrevPage_Click(object sender, EventArgs e)
+        {
+            if (currentPage > 1)
+            {
+                currentPage--;
+                RefreshDataView();
+            }
+        }
+
+        private void BtnNextPage_Click(object sender, EventArgs e)
+        {
+            int totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+            if (currentPage < totalPages)
+            {
+                currentPage++;
+                RefreshDataView();
+            }
+        }
+
+        private void CmbPageSize_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (cmbPageSize.SelectedItem != null)
+            {
+                pageSize = (int)cmbPageSize.SelectedItem;
+                currentPage = 1; 
+                RefreshDataView();
+            }
+        }
+
         private void UpdateLayout()
         {
             int currentY = headerHeight;
@@ -456,31 +571,7 @@ namespace HRApplication
         {
             filtersPanel.Visible = !filtersPanel.Visible;
             btnToggleFilters.Text = filtersPanel.Visible ? "Фильтры ▲" : "Фильтры ▼";
-
-            UpdateLayout(); // Обновляем расположение при изменении видимости фильтров
-
-            if (filtersPanel.Visible && !filtersPinned)
-            {
-                var autoHideTimer = new Timer { Interval = 10000 };
-                autoHideTimer.Tick += (s, args) =>
-                {
-                    if (!filtersPinned && filtersPanel.Visible)
-                    {
-                        filtersPanel.Visible = false;
-                        btnToggleFilters.Text = "Фильтры ▼";
-                        UpdateLayout();
-                    }
-                    autoHideTimer.Stop();
-                    autoHideTimer.Dispose();
-                };
-                autoHideTimer.Start();
-            }
-        }
-
-        private void BtnPin_Click(object sender, EventArgs e)
-        {
-            filtersPinned = !filtersPinned;
-            ((Button)sender).Text = filtersPinned ? "Открепить" : "Закрепить";
+            UpdateLayout();
         }
 
         private void OnFilterChanged(object sender, EventArgs e)
@@ -505,6 +596,7 @@ namespace HRApplication
 
         private void CmbViewType_SelectedIndexChanged(object sender, EventArgs e)
         {
+            currentPage = 1;
             RefreshDataView();
             HideCandidateCard();
         }
@@ -513,31 +605,151 @@ namespace HRApplication
         {
             if (cmbViewType.SelectedIndex == 0 && dataGridView.SelectedRows.Count > 0)
             {
-                var selectedCandidate = dataGridView.SelectedRows[0].DataBoundItem as Candidate;
-                if (selectedCandidate != null)
+                // Получаем ID кандидата из выбранной строки
+                var selectedRow = dataGridView.SelectedRows[0];
+                if (selectedRow.DataBoundItem != null)
                 {
-                    ShowCandidateCard(selectedCandidate);
+                    // Получаем CandidateId из анонимного типа
+                    var candidateIdProperty = selectedRow.DataBoundItem.GetType().GetProperty("CandidateId");
+                    if (candidateIdProperty != null)
+                    {
+                        int candidateId = (int)candidateIdProperty.GetValue(selectedRow.DataBoundItem);
+                        var selectedCandidate = allCandidates.FirstOrDefault(c => c.CandidateId == candidateId);
+                        if (selectedCandidate != null)
+                        {
+                            ShowCandidateCard(selectedCandidate);
+                            return;
+                        }
+                    }
                 }
             }
-            else
-            {
-                HideCandidateCard();
-            }
+            HideCandidateCard();
         }
 
+        private void UpdatePaginationInfo()
+        {
+            int totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+            if (totalPages == 0) totalPages = 1; // Минимум 1 страница
+
+            lblPageInfo.Text = $"Страница {currentPage} из {totalPages}";
+
+            // Обновляем состояние кнопок
+            btnPrevPage.Enabled = currentPage > 1;
+            btnNextPage.Enabled = currentPage < totalPages;
+
+            // Показываем информацию о количестве записей
+            lblPageInfo.Text = $"Страница {currentPage} из {totalPages} ({totalItems} записей)";
+        }
+
+
+        // === ЭКСПОРТ В EXCEL ===
         private void BtnExportCandidates_Click(object sender, EventArgs e)
         {
-            ExportToJson(allCandidates, "candidates.json");
+            ExportToExcel(allCandidates, "candidates.xlsx", "Кандидаты");
         }
 
         private void BtnExportVacancies_Click(object sender, EventArgs e)
         {
-            ExportToJson(allVacancies, "vacancies.json");
+            ExportToExcel(allVacancies, "vacancies.xlsx", "Вакансии");
         }
 
         private void BtnExportApplications_Click(object sender, EventArgs e)
         {
-            ExportToJson(allApplications, "applications.json");
+            ExportToExcel(allApplications, "applications.xlsx", "Отклики");
+        }
+
+        private void ExportToExcel<T>(List<T> data, string defaultFileName, string sheetName)
+        {
+            try
+            {
+                using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                {
+                    saveFileDialog.Filter = "Excel Files|*.xlsx";
+                    saveFileDialog.FileName = defaultFileName;
+                    saveFileDialog.Title = "Сохранить Excel файл";
+
+                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        using (var workbook = new XLWorkbook())
+                        {
+                            var worksheet = workbook.Worksheets.Add(sheetName);
+
+                            // Создаем DataTable из данных
+                            var dataTable = new DataTable();
+
+                            // Получаем свойства типа T
+                            var properties = typeof(T).GetProperties();
+
+                            // Создаем колонки (исключаем FullName)
+                            foreach (var prop in properties)
+                            {
+                                if (prop.Name == "FullName") continue;
+
+                                string columnName = GetDisplayName(prop.Name);
+                                dataTable.Columns.Add(columnName, typeof(string));
+                            }
+
+                            // Заполняем данные
+                            foreach (var item in data)
+                            {
+                                var row = dataTable.NewRow();
+                                foreach (var prop in properties)
+                                {
+                                    if (prop.Name == "FullName") continue;
+
+                                    var value = prop.GetValue(item);
+                                    row[GetDisplayName(prop.Name)] = value?.ToString() ?? "";
+                                }
+                                dataTable.Rows.Add(row);
+                            }
+
+                            // Добавляем данные в Excel
+                            worksheet.Cell(1, 1).InsertTable(dataTable);
+
+                            // Авто-размер колонок
+                            worksheet.Columns().AdjustToContents();
+
+                            // Сохраняем файл В ВЫБРАННУЮ ПОЛЬЗОВАТЕЛЕМ ПАПКУ
+                            workbook.SaveAs(saveFileDialog.FileName);
+
+                            MessageBox.Show($"Данные экспортированы в:\n{saveFileDialog.FileName}", "Успех",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте в Excel: {ex.Message}", "Ошибка",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private string GetDisplayName(string propertyName)
+        {
+            var displayNames = new Dictionary<string, string>
+            {
+                { "CandidateId", "ID" },
+                { "VacancyId", "ID вакансии" },
+                { "ApplicationId", "ID отклика" },
+                { "FirstName", "Имя" },
+                { "LastName", "Фамилия" },
+                { "Age", "Возраст" },
+                { "Specialization", "Специализация" },
+                { "Skills", "Навыки" },
+                { "Title", "Название" },
+                { "Description", "Описание" },
+                { "RequiredSkills", "Требуемые навыки" },
+                { "Status", "Статус" },
+                { "CreatedAt", "Дата создания" },
+                { "AppliedAt", "Дата отклика" },
+                { "VacancyTitle", "Вакансия" },
+                { "CandidateName", "Кандидат" },
+                { "MinAge", "Мин. возраст" },
+                { "MaxAge", "Макс. возраст" }
+            };
+
+            return displayNames.ContainsKey(propertyName) ? displayNames[propertyName] : propertyName;
         }
 
         // === ОСНОВНЫЕ МЕТОДЫ ===
@@ -587,6 +799,10 @@ namespace HRApplication
         {
             try
             {
+                if (filterTimer.Enabled) 
+                {
+                    currentPage = 1;
+                }
                 switch (cmbViewType.SelectedIndex)
                 {
                     case 0: // Кандидаты
@@ -607,17 +823,33 @@ namespace HRApplication
             }
         }
 
+
         private void DisplayCandidates()
         {
             var filteredCandidates = allCandidates.AsEnumerable();
 
-            // Применение фильтров
+            // Применение фильтров (существующий код без изменений)
             if (!string.IsNullOrEmpty(txtSearch.Text))
             {
                 string searchText = txtSearch.Text.ToLower();
-                filteredCandidates = filteredCandidates.Where(c =>
-                    (c.FullName != null && c.FullName.ToLower().Contains(searchText)) ||
-                    (c.Skills != null && c.Skills.ToLower().Contains(searchText)));
+                string searchType = cmbSearchType.SelectedItem?.ToString() ?? "Навыках";
+
+                if (searchType == "Навыках")
+                {
+                    filteredCandidates = filteredCandidates.Where(c =>
+                        c.Skills != null && c.Skills.ToLower().Contains(searchText));
+                }
+                else if (searchType == "Имени")
+                {
+                    filteredCandidates = filteredCandidates.Where(c =>
+                        (c.FirstName != null && c.FirstName.ToLower().Contains(searchText)) ||
+                        (c.LastName != null && c.LastName.ToLower().Contains(searchText)));
+                }
+                else if (searchType == "Специализации")
+                {
+                    filteredCandidates = filteredCandidates.Where(c =>
+                        c.Specialization != null && c.Specialization.ToLower().Contains(searchText));
+                }
             }
 
             if (cmbSpecialization.SelectedIndex > 0)
@@ -646,52 +878,157 @@ namespace HRApplication
             filteredCandidates = filteredCandidates.Where(c =>
                 c.Age >= trackBarMinAge.Value && c.Age <= trackBarMaxAge.Value);
 
-            dataGridView.DataSource = filteredCandidates.ToList();
+            // ПАГИНАЦИЯ
+            var result = filteredCandidates.ToList();
+            totalItems = result.Count;
+
+            var pagedResult = result
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            UpdatePaginationInfo();
+
+            var displayData = pagedResult.Select(c => new
+            {
+                c.CandidateId,
+                c.FirstName,
+                c.LastName,
+                c.Age,
+                c.Specialization,
+                c.Skills,
+                c.CreatedAt
+            }).ToList();
+
+            dataGridView.DataSource = displayData;
             FormatCandidatesGrid();
         }
 
         private void DisplayVacancies()
         {
-            dataGridView.DataSource = allVacancies;
+            var filteredVacancies = allVacancies.AsEnumerable();
+
+            // Поиск по вакансиям
+            if (!string.IsNullOrEmpty(txtSearch.Text))
+            {
+                string searchText = txtSearch.Text.ToLower();
+                string searchType = cmbSearchType.SelectedItem?.ToString() ?? "Навыках";
+
+                if (searchType == "Навыках")
+                {
+                    filteredVacancies = filteredVacancies.Where(v =>
+                        v.RequiredSkills != null && v.RequiredSkills.ToLower().Contains(searchText));
+                }
+                else if (searchType == "Вакансиях")
+                {
+                    filteredVacancies = filteredVacancies.Where(v =>
+                        v.Title != null && v.Title.ToLower().Contains(searchText));
+                }
+            }
+
+            // ПАГИНАЦИЯ ДЛЯ ВАКАНСИЙ
+            var result = filteredVacancies.ToList();
+            totalItems = result.Count;
+
+            var pagedResult = result
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            UpdatePaginationInfo();
+
+            dataGridView.DataSource = pagedResult;
             FormatVacanciesGrid();
         }
 
         private void DisplayApplications()
         {
-            dataGridView.DataSource = allApplications;
+            var filteredApplications = allApplications.AsEnumerable();
+
+            // Поиск по откликам
+            if (!string.IsNullOrEmpty(txtSearch.Text))
+            {
+                string searchText = txtSearch.Text.ToLower();
+                string searchType = cmbSearchType.SelectedItem?.ToString() ?? "Навыках";
+
+                if (searchType == "Статусе отклика")
+                {
+                    filteredApplications = filteredApplications.Where(a =>
+                        a.Status != null && a.Status.ToLower().Contains(searchText));
+                }
+                else if (searchType == "Вакансиях")
+                {
+                    filteredApplications = filteredApplications.Where(a =>
+                        a.VacancyTitle != null && a.VacancyTitle.ToLower().Contains(searchText));
+                }
+            }
+
+            // ПАГИНАЦИЯ ДЛЯ ОТКЛИКОВ
+            var result = filteredApplications.ToList();
+            totalItems = result.Count;
+
+            var pagedResult = result
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            UpdatePaginationInfo();
+
+            dataGridView.DataSource = pagedResult;
             FormatApplicationsGrid();
         }
 
         private void FormatCandidatesGrid()
         {
-            if (dataGridView.Columns.Contains("CandidateId"))
-                dataGridView.Columns["CandidateId"].Visible = false;
-            if (dataGridView.Columns.Contains("CreatedAt"))
-                dataGridView.Columns["CreatedAt"].Visible = false;
+            // Скрываем ненужные колонки
+            var columnsToHide = new[] { "CandidateId", "CreatedAt" };
+            foreach (string columnName in columnsToHide)
+            {
+                if (dataGridView.Columns.Contains(columnName))
+                    dataGridView.Columns[columnName].Visible = false;
+            }
+
+            // Настраиваем заголовки
+            if (dataGridView.Columns.Contains("FirstName"))
+                dataGridView.Columns["FirstName"].HeaderText = "Имя";
+            if (dataGridView.Columns.Contains("LastName"))
+                dataGridView.Columns["LastName"].HeaderText = "Фамилия";
+            if (dataGridView.Columns.Contains("Age"))
+                dataGridView.Columns["Age"].HeaderText = "Возраст";
+            if (dataGridView.Columns.Contains("Specialization"))
+                dataGridView.Columns["Specialization"].HeaderText = "Специализация";
             if (dataGridView.Columns.Contains("Skills"))
-                dataGridView.Columns["Skills"].Visible = false;
+                dataGridView.Columns["Skills"].HeaderText = "Навыки";
         }
 
         private void FormatVacanciesGrid()
         {
-            if (dataGridView.Columns.Contains("VacancyId"))
-                dataGridView.Columns["VacancyId"].Visible = false;
-            if (dataGridView.Columns.Contains("CreatedAt"))
-                dataGridView.Columns["CreatedAt"].Visible = false;
-            if (dataGridView.Columns.Contains("Description"))
-                dataGridView.Columns["Description"].Visible = false;
-            if (dataGridView.Columns.Contains("RequiredSkills"))
-                dataGridView.Columns["RequiredSkills"].Visible = false;
+            var columnsToHide = new[] { "VacancyId", "CreatedAt", "Description", "RequiredSkills", "MinAge", "MaxAge" };
+            foreach (string columnName in columnsToHide)
+            {
+                if (dataGridView.Columns.Contains(columnName))
+                    dataGridView.Columns[columnName].Visible = false;
+            }
+
+            if (dataGridView.Columns.Contains("Title"))
+                dataGridView.Columns["Title"].HeaderText = "Название вакансии";
         }
 
         private void FormatApplicationsGrid()
         {
-            if (dataGridView.Columns.Contains("ApplicationId"))
-                dataGridView.Columns["ApplicationId"].Visible = false;
-            if (dataGridView.Columns.Contains("CandidateId"))
-                dataGridView.Columns["CandidateId"].Visible = false;
-            if (dataGridView.Columns.Contains("VacancyId"))
-                dataGridView.Columns["VacancyId"].Visible = false;
+            var columnsToHide = new[] { "ApplicationId", "CandidateId", "VacancyId" };
+            foreach (string columnName in columnsToHide)
+            {
+                if (dataGridView.Columns.Contains(columnName))
+                    dataGridView.Columns[columnName].Visible = false;
+            }
+
+            if (dataGridView.Columns.Contains("VacancyTitle"))
+                dataGridView.Columns["VacancyTitle"].HeaderText = "Вакансия";
+            if (dataGridView.Columns.Contains("Status"))
+                dataGridView.Columns["Status"].HeaderText = "Статус";
+            if (dataGridView.Columns.Contains("AppliedAt"))
+                dataGridView.Columns["AppliedAt"].HeaderText = "Дата отклика";
         }
 
         private void ShowCandidateCard(Candidate candidate)
@@ -706,7 +1043,7 @@ namespace HRApplication
             // Имя кандидата
             var lblName = new Label
             {
-                Text = candidate.FullName,
+                Text = $"{candidate.FirstName} {candidate.LastName}",
                 Font = new Font("Segoe UI", 14, FontStyle.Bold),
                 ForeColor = DesignColors.PrimaryColor,
                 Size = new Size(320, 30),
@@ -764,7 +1101,7 @@ namespace HRApplication
             };
             yPos += 90;
 
-            // Отклики заголовок
+            
             var lblApplicationsTitle = new Label
             {
                 Text = $"Отклики ({applications.Count}):",
@@ -775,7 +1112,7 @@ namespace HRApplication
             };
             yPos += 25;
 
-            // Список откликов
+            
             var applicationsPanel = new Panel
             {
                 Size = new Size(320, 150),
@@ -801,7 +1138,7 @@ namespace HRApplication
             }
             yPos += 160;
 
-            // Кнопка закрытия
+            
             var btnClose = new Button
             {
                 Text = "Закрыть",
@@ -820,7 +1157,7 @@ namespace HRApplication
                 lblApplicationsTitle, applicationsPanel, btnClose
             });
 
-            UpdateLayout(); // Обновляем расположение при показе карточки
+            UpdateLayout();
         }
 
         private Color GetStatusColor(string status)
@@ -829,28 +1166,39 @@ namespace HRApplication
 
             string statusLower = status.ToLower();
 
-            if (statusLower == "accepted")
+            if (statusLower == "accepted" || statusLower == "принят")
                 return Color.Green;
-            else if (statusLower == "rejected")
+            else if (statusLower == "rejected" || statusLower == "отклонен")
                 return Color.Red;
-            else if (statusLower == "interview")
+            else if (statusLower == "interview" || statusLower == "собеседование")
                 return Color.Orange;
             else
                 return DesignColors.TextColor;
+        }
+
+        private void InitializeComponent()
+        {
+            this.SuspendLayout();
+            // 
+            // ModernMainForm
+            // 
+            this.ClientSize = new System.Drawing.Size(806, 381);
+            this.Name = "ModernMainForm";
+            this.ResumeLayout(false);
+
         }
 
         private void HideCandidateCard()
         {
             candidateCardPanel.Visible = false;
             candidateCardPanel.Controls.Clear();
-            UpdateLayout(); // Обновляем расположение при скрытии карточки
+            UpdateLayout();
         }
 
         private void ApplyTheme()
         {
             this.BackColor = DesignColors.BackgroundColor;
 
-            // Обновляем цвета основных панелей
             if (headerPanel != null) headerPanel.BackColor = DesignColors.PrimaryColor;
             if (filtersPanel != null) filtersPanel.BackColor = DesignColors.CardColor;
             if (mainContentPanel != null) mainContentPanel.BackColor = DesignColors.BackgroundColor;
@@ -865,56 +1213,27 @@ namespace HRApplication
             }
         }
 
-        private void ExportToJson(object data, string fileName)
-        {
-            try
-            {
-                string json = JsonConvert.SerializeObject(data, Newtonsoft.Json.Formatting.Indented);
-                File.WriteAllText(fileName, json);
-                MessageBox.Show($"Данные экспортированы в {fileName}", "Успех",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при экспорте: {ex.Message}", "Ошибка",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private async void btnTestRepository_Click(object sender, EventArgs e)
+        private async void BtnTestRepository_Click(object sender, EventArgs e)
         {
             try
             {
                 btnTestRepository.Enabled = false;
                 btnTestRepository.Text = "Тестирование...";
 
+                
+                btnExportCandidates.Enabled = false;
+                btnExportVacancies.Enabled = false;
+                btnExportApplications.Enabled = false;
+
                 if (databaseHelper != null && databaseHelper.IsConnected())
                 {
-                    // ✅ ИСПОЛЬЗУЕМ СОХРАНЕННУЮ СТРОКУ ПОДКЛЮЧЕНИЯ
                     string currentConnectionString = ModernConnectionForm.CurrentConnectionString;
 
-                    // Показываем какую строку используем (без пароля для безопасности)
-                    string safeConnectionString = currentConnectionString;
-                    if (!string.IsNullOrEmpty(safeConnectionString))
-                    {
-                        // Скрываем пароль в отладочном сообщении
-                        int passwordIndex = safeConnectionString.IndexOf("Password=");
-                        if (passwordIndex >= 0)
-                        {
-                            int semicolonIndex = safeConnectionString.IndexOf(';', passwordIndex);
-                            if (semicolonIndex == -1) semicolonIndex = safeConnectionString.Length;
-                            string passwordPart = safeConnectionString.Substring(passwordIndex, semicolonIndex - passwordIndex);
-                            safeConnectionString = safeConnectionString.Replace(passwordPart, "Password=***");
-                        }
-                    }
-
-                    MessageBox.Show($"Используем сохраненное подключение:\n{safeConnectionString}",
-                                  "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
                     var repository = new CandidateRepository(currentConnectionString);
+
+                    
                     var repositoryCandidates = await repository.GetAllCandidatesAsync();
 
-                    // Сравниваем со старым методом
                     var oldCandidates = databaseHelper.GetCandidates();
 
                     MessageBox.Show($"✅ Репозиторий работает!\n\n" +
@@ -937,8 +1256,12 @@ namespace HRApplication
             }
             finally
             {
+                
                 btnTestRepository.Enabled = true;
                 btnTestRepository.Text = "Тест репозитория";
+                btnExportCandidates.Enabled = true;
+                btnExportVacancies.Enabled = true;
+                btnExportApplications.Enabled = true;
             }
         }
 
