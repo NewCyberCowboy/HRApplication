@@ -17,7 +17,7 @@ namespace HRApplication.IntegrationTests
             Console.WriteLine($"🔗 Connection string: {ConnectionString}");
             InitializeTestDatabase();
         }
-
+        
         private void InitializeTestDatabase()
         {
             try

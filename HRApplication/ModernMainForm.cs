@@ -13,6 +13,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
+
 namespace HRApplication
 {
     public partial class ModernMainForm : Form
@@ -35,6 +36,12 @@ namespace HRApplication
         private bool filtersPinned = false;
         private Button btnTestRepository;
 
+        // Новые элементы для функции переворота слова
+        private TextBox txtInputWord;
+        private Button btnReverseWord;
+        private Label lblReversedWord;
+        private Panel reversalPanel;
+
         // Элементы фильтров
         private TextBox txtSearch;
         private ComboBox cmbSpecialization;
@@ -44,7 +51,7 @@ namespace HRApplication
         private Label lblMinAge;
         private Label lblMaxAge;
         private Label lblAgeRange;
-        private ComboBox cmbSearchType; 
+        private ComboBox cmbSearchType;
 
         // Пагинация
         private int currentPage = 1;
@@ -54,25 +61,44 @@ namespace HRApplication
         private int totalItems = 0;
         private ComboBox cmbPageSize;
 
-
         // Высота элементов для динамического расчета
         private int headerHeight = 60;
-        private int filtersHeight = 120; 
-        
+        private int filtersHeight = 120;
+
+        private Button btnExpandPanel;
+        private bool isPanelExpanded = false;
+        private Panel expandedPanel;
+        private ComboBox cmbInputMode;
+        private TextBox txtComplexInput;
+        private Button btnProcessComplex;
+        private Label lblValidationMessage;
+
+       
+
         public ModernMainForm(DatabaseHelper dbHelper)
         {
             databaseHelper = dbHelper;
+
+            // Сначала создаем панель переворота
+            CreateWordReversalPanel();
+
+            // Потом остальные компоненты
             InitializeCustomComponent();
             InitializeFilterTimer();
             LoadData();
             ApplyTheme();
+
+            // Принудительное обновление позиции после загрузки
+            this.Shown += (s, e) => {
+                UpdateReversalPanelPosition();
+                reversalPanel?.BringToFront();
+            };
         }
 
         private void InitializeCustomComponent()
         {
             this.SuspendLayout();
 
-            
             this.Text = "HR Management System";
             this.WindowState = FormWindowState.Maximized;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -84,15 +110,580 @@ namespace HRApplication
             CreateMainContentPanel();
             CreateCandidateCardPanel();
 
-            
+            // Добавляем основные элементы (панель переворота уже добавлена)
             this.Controls.Add(mainContentPanel);
             this.Controls.Add(filtersPanel);
             this.Controls.Add(candidateCardPanel);
             this.Controls.Add(headerPanel);
 
-            UpdateLayout();
-
             this.ResumeLayout(false);
+
+            // Обновляем layout
+            UpdateLayout();
+        }
+
+        private void CreateWordReversalPanel()
+        {
+            // Создаем компактную кнопку для разворачивания
+            btnExpandPanel = new Button
+            {
+                Text = "🔤", // Иконка текста
+                Size = new Size(40, 40),
+                Location = new Point(this.ClientSize.Width - 60, 20),
+                BackColor = Color.SteelBlue,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnExpandPanel.FlatAppearance.BorderSize = 0;
+            btnExpandPanel.Click += BtnExpandPanel_Click;
+
+            this.Controls.Add(btnExpandPanel);
+
+            // Создаем развернутую панель (изначально скрыта)
+            CreateExpandedPanel();
+        }
+
+        private void BtnExpandPanel_Click(object sender, EventArgs e)
+        {
+            ToggleExpandedPanel(!isPanelExpanded);
+        }
+
+        private void CreateExpandedPanel()
+        {
+            expandedPanel = new Panel
+            {
+                Size = new Size(400, 500),
+                BackColor = Color.FromArgb(250, 250, 250),
+                BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(15),
+                Visible = false,
+                AutoScroll = true
+            };
+
+            // Заголовок с кнопкой закрытия
+            var titlePanel = new Panel
+            {
+                Size = new Size(370, 30),
+                Location = new Point(0, 0)
+            };
+
+            var lblTitle = new Label
+            {
+                Text = "Обработка текста",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = DesignColors.PrimaryColor,
+                Size = new Size(200, 30),
+                Location = new Point(0, 0),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            var btnClosePanel = new Button
+            {
+                Text = "×",
+                Size = new Size(30, 30),
+                Location = new Point(340, 0),
+                BackColor = Color.LightCoral,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnClosePanel.FlatAppearance.BorderSize = 0;
+            btnClosePanel.Click += (s, e) => ToggleExpandedPanel(false);
+
+            titlePanel.Controls.AddRange(new Control[] { lblTitle, btnClosePanel });
+
+            // Выбор режима ввода
+            var lblInputMode = new Label
+            {
+                Text = "Режим обработки:",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = DesignColors.TextColor,
+                Size = new Size(150, 20),
+                Location = new Point(0, 40)
+            };
+
+            cmbInputMode = new ComboBox
+            {
+                Size = new Size(200, 25),
+                Location = new Point(0, 65),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9)
+            };
+            cmbInputMode.Items.AddRange(new[] {
+                "Одно слово",
+                "ФИО (Иванов Иван Иванович)",
+                "Список через запятую",
+                "Сложные слова через дефис",
+                "Многострочный ввод"  // Новый режим
+            });
+            cmbInputMode.SelectedIndex = 0;
+            cmbInputMode.SelectedIndexChanged += CmbInputMode_SelectedIndexChanged;
+
+            // Поле для сложного ввода
+            var lblComplexInput = new Label
+            {
+                Text = "Введите текст:",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = DesignColors.TextColor,
+                Size = new Size(150, 20),
+                Location = new Point(0, 100)
+            };
+
+            txtComplexInput = new TextBox
+            {
+                Size = new Size(370, 80),
+                Location = new Point(0, 125),
+                Font = new Font("Segoe UI", 9),
+                BackColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical
+            };
+
+            // Кнопка обработки
+            btnProcessComplex = new Button
+            {
+                Text = "Обработать",
+                Size = new Size(120, 30),
+                Location = new Point(0, 215),
+                BackColor = Color.SteelBlue,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnProcessComplex.FlatAppearance.BorderSize = 0;
+            btnProcessComplex.Click += BtnProcessComplex_Click;
+
+            // Сообщение валидации
+            lblValidationMessage = new Label
+            {
+                Text = "",
+                Font = new Font("Segoe UI", 9),
+                ForeColor = Color.Red,
+                Size = new Size(370, 40),
+                Location = new Point(0, 250),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            // Результат
+            lblReversedWord = new Label
+            {
+                Name = "lblReversedWord",
+                Text = "Результат появится здесь...",
+                Font = new Font("Segoe UI", 10, FontStyle.Regular),
+                ForeColor = Color.DarkBlue,
+                Size = new Size(370, 60),
+                Location = new Point(0, 290),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.FromArgb(240, 240, 240),
+                AutoSize = true,
+                MaximumSize = new Size(370, 0)
+            };
+
+            expandedPanel.Controls.AddRange(new Control[] {
+        titlePanel,
+        lblInputMode,
+        cmbInputMode,
+        lblComplexInput,
+        txtComplexInput,
+        btnProcessComplex,
+        lblValidationMessage,
+        lblReversedWord
+    });
+
+            this.Controls.Add(expandedPanel);
+            UpdateExpandedPanelPosition();
+        }
+
+
+        private void UpdateReversalPanelPosition()
+        {
+            if (reversalPanel != null)
+            {
+                reversalPanel.Location = new Point(this.ClientSize.Width - reversalPanel.Width - 20, 70);
+                reversalPanel.BringToFront();
+            }
+        }
+
+        private void ToggleExpandedPanel(bool show)
+        {
+            isPanelExpanded = show;
+            expandedPanel.Visible = show;
+            btnExpandPanel.Visible = !show;
+
+            if (show)
+            {
+                UpdateExpandedPanelPosition();
+                expandedPanel.BringToFront();
+                txtComplexInput.Focus();
+            }
+        }
+
+        private void UpdateExpandedPanelPosition()
+        {
+            if (expandedPanel != null)
+            {
+                expandedPanel.Location = new Point(
+                    this.ClientSize.Width - expandedPanel.Width - 20,
+                    70
+                );
+            }
+
+            if (btnExpandPanel != null)
+            {
+                btnExpandPanel.Location = new Point(
+                    this.ClientSize.Width - btnExpandPanel.Width - 20,
+                    20
+                );
+            }
+        }
+        private void CmbInputMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateInputMode();
+        }
+
+        private void UpdateInputMode()
+        {
+            lblValidationMessage.Text = "";
+
+            switch (cmbInputMode.SelectedIndex)
+            {
+                case 0: // Одно слово
+                    txtComplexInput.Text = "Введите одно слово";
+                    txtComplexInput.Height = 25; // Однострочное поле
+                    txtComplexInput.Multiline = false;
+                    break;
+                case 1: // ФИО
+                    txtComplexInput.Text = "Иванов Иван Иванович";
+                    txtComplexInput.Height = 25;
+                    txtComplexInput.Multiline = false;
+                    break;
+                case 2: // Список через запятую
+                    txtComplexInput.Text = "слово1, слово2, слово3";
+                    txtComplexInput.Height = 25;
+                    txtComplexInput.Multiline = false;
+                    break;
+                case 3: // Сложные слова через дефис
+                    txtComplexInput.Text = "северо-запад, интернет-магазин";
+                    txtComplexInput.Height = 25;
+                    txtComplexInput.Multiline = false;
+                    break;
+                case 4: // Многострочный ввод
+                    txtComplexInput.Text = "Первое слово\nВторое слово\nТретье слово";
+                    txtComplexInput.Height = 80; // Многострочное поле
+                    txtComplexInput.Multiline = true;
+                    break;
+            }
+
+            if (txtComplexInput.Text != "Введите одно слово")
+            {
+                txtComplexInput.ForeColor = Color.Black;
+            }
+            else
+            {
+                txtComplexInput.ForeColor = Color.Gray;
+            }
+        }
+
+        private void BtnProcessComplex_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string input = txtComplexInput.Text.Trim();
+
+                // Проверка на placeholder
+                if (input == "Введите одно слово" || string.IsNullOrWhiteSpace(input))
+                {
+                    ShowValidationMessage("Введите текст для обработки");
+                    return;
+                }
+
+                // Валидация ввода
+                if (!ValidateInput(input))
+                {
+                    return;
+                }
+
+                string result = ProcessInput(input);
+                lblReversedWord.Text = result;
+                lblValidationMessage.Text = "✅ Обработка завершена успешно";
+                lblValidationMessage.ForeColor = Color.Green;
+
+            }
+            catch (Exception ex)
+            {
+                ShowValidationMessage($"Ошибка: {ex.Message}");
+            }
+        }
+
+        private bool ValidateInput(string input)
+        {
+            // Проверка на нижние подчеркивания
+            if (input.Contains("_"))
+            {
+                ShowValidationMessage("❌ Ошибка: Использование нижнего подчеркивания запрещено!\n" +
+                                    "Используйте пробелы, запятые или дефисы для разделения слов.");
+                return false;
+            }
+
+            // Проверка на специальные символы (кроме разрешенных)
+            var invalidChars = new[] { '@', '#', '$', '%', '&', '*', '=', '+', '\\', '/', '|' };
+            foreach (char c in invalidChars)
+            {
+                if (input.Contains(c))
+                {
+                    ShowValidationMessage($"❌ Ошибка: Запрещенный символ '{c}'\n" +
+                                        "Разрешенные разделители: пробел, запятая, дефис, точка, новая строка.");
+                    return false;
+                }
+            }
+
+            // Проверка для режима "Одно слово"
+            if (cmbInputMode.SelectedIndex == 0)
+            {
+                if (input.Contains(' ') || input.Contains(',') || input.Contains('-') || input.Contains('\n'))
+                {
+                    ShowValidationMessage("❌ Ошибка: В режиме 'Одно слово' нельзя использовать пробелы, запятые, дефисы или новые строки");
+                    return false;
+                }
+            }
+
+            // Проверка для режима "Многострочный ввод" - минимальная проверка
+            if (cmbInputMode.SelectedIndex == 4)
+            {
+                var lines = input.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                if (lines.Length == 0)
+                {
+                    ShowValidationMessage("❌ Ошибка: Введите хотя бы одну строку");
+                    return false;
+                }
+            }
+
+            lblValidationMessage.Text = "✅ Валидация пройдена";
+            lblValidationMessage.ForeColor = Color.Green;
+            return true;
+        }
+
+        private string ProcessInput(string input)
+        {
+            switch (cmbInputMode.SelectedIndex)
+            {
+                case 0: // Одно слово
+                    return ReverseWord(input);
+
+                case 1: // ФИО
+                    return ProcessFIO(input);
+
+                case 2: // Список через запятую
+                    return ProcessCommaSeparated(input);
+
+                case 3: // Сложные слова через дефис
+                    return ProcessHyphenatedWords(input);
+
+                case 4: // Многострочный ввод
+                    return ProcessMultilineInput(input);
+
+                default:
+                    return ReverseWord(input);
+            }
+        }
+
+        private string ProcessMultilineInput(string input)
+        {
+            var lines = input.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(x => x.Trim())
+                             .Where(x => !string.IsNullOrWhiteSpace(x));
+
+            var processedLines = lines.Select(line =>
+            {
+                // Обрабатываем каждую строку в зависимости от ее содержания
+                if (line.Contains(',') && line.Contains('-'))
+                {
+                    // Если строка содержит и запятые и дефисы - обрабатываем как сложные слова
+                    return ProcessHyphenatedWords(line);
+                }
+                else if (line.Contains(','))
+                {
+                    // Если строка содержит запятые - обрабатываем как список
+                    return ProcessCommaSeparated(line);
+                }
+                else if (line.Contains('-'))
+                {
+                    // Если строка содержит дефисы - обрабатываем как сложные слова
+                    return ProcessHyphenatedWords(line);
+                }
+                else if (line.Contains(' '))
+                {
+                    // Если строка содержит пробелы - разбиваем на слова и переворачиваем каждое
+                    var words = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    return string.Join("\n", words.Select(ReverseWord));
+                }
+                else
+                {
+                    // Одиночное слово
+                    return ReverseWord(line);
+                }
+            });
+
+            return string.Join("\n", processedLines);
+        }
+
+        private string ProcessFIO(string fio)
+        {
+            var parts = fio.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length >= 2)
+            {
+                // Фамилия Имя Отчество -> переворачиваем каждую часть и выводим с новой строки
+                return string.Join("\n", parts.Select(ReverseWord));
+            }
+            else
+            {
+                // Одиночное слово
+                return ReverseWord(fio);
+            }
+        }
+
+
+        private string ProcessCommaSeparated(string input)
+        {
+            var items = input.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(x => x.Trim())
+                             .Where(x => !string.IsNullOrWhiteSpace(x));
+
+            var reversedItems = items.Select(item =>
+            {
+                if (item.Contains(' '))
+                {
+                    // Если элемент содержит пробелы, обрабатываем как несколько слов
+                    var words = item.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                                   .Select(ReverseWord);
+                    return string.Join("\n", words);
+                }
+                else
+                {
+                    return ReverseWord(item);
+                }
+            });
+
+            return string.Join("\n", reversedItems);
+        }
+
+
+
+        private string ProcessHyphenatedWords(string input)
+        {
+            var words = input.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(x => x.Trim())
+                             .Where(x => !string.IsNullOrWhiteSpace(x));
+
+            var processedWords = words.Select(word =>
+            {
+                if (word.Contains('-'))
+                {
+                    // Разделяем по дефисам и переворачиваем каждую часть
+                    var parts = word.Split(new[] { '-' }, StringSplitOptions.RemoveEmptyEntries)
+                                   .Select(ReverseWord);
+                    return string.Join("-", parts);
+                }
+                else
+                {
+                    return ReverseWord(word);
+                }
+            });
+
+            return string.Join("\n", processedWords);
+        }
+
+        private void ShowValidationMessage(string message)
+        {
+            lblValidationMessage.Text = message;
+            lblValidationMessage.ForeColor = Color.Red;
+        }
+
+
+        private void BtnToggleReversal_Click(object sender, EventArgs e)
+        {
+            if (sender is Button btnToggle)
+            {
+                bool isCollapsed = (bool)btnToggle.Tag;
+
+                if (isCollapsed)
+                {
+                    // Разворачиваем панель
+                    reversalPanel.Size = new Size(300, 120);
+                    btnToggle.Text = "−";
+                    btnToggle.Tag = false;
+
+                    // Показываем все элементы кроме заголовка
+                    foreach (Control control in reversalPanel.Controls)
+                    {
+                        if (control is Panel) continue; // Заголовок не скрываем
+                        control.Visible = true;
+                    }
+                }
+                else
+                {
+                    // Сворачиваем панель
+                    reversalPanel.Size = new Size(300, 40);
+                    btnToggle.Text = "+";
+                    btnToggle.Tag = true;
+
+                    // Скрываем все элементы кроме заголовка
+                    foreach (Control control in reversalPanel.Controls)
+                    {
+                        if (control is Panel) continue; // Заголовок не скрываем
+                        control.Visible = false;
+                    }
+                }
+
+                // Обновляем позицию после изменения размера
+                UpdateReversalPanelPosition();
+            }
+        }
+
+
+        // --- ФУНКЦИЯ ПЕРЕВОРОТА СЛОВА ---
+        private string ReverseWord(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            // Разворачиваем строку
+            char[] arr = input.ToCharArray();
+            Array.Reverse(arr);
+            return new string(arr);
+        }
+
+        // --- ОБРАБОТЧИК КНОПКИ ПЕРЕВОРОТА ---
+        private void btnReverseWord_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string inputWord = txtInputWord.Text.Trim();
+
+                // Проверяем, не является ли ввод placeholder'ом
+                if (string.IsNullOrWhiteSpace(inputWord) || inputWord == "Введите слово")
+                {
+                    MessageBox.Show("Введите слово для переворота.",
+                        "Подсказка", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    txtInputWord.Focus();
+                    return;
+                }
+
+                string reversed = ReverseWord(inputWord);
+                lblReversedWord.Text = $"Результат: {reversed}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при выполнении переворота слова:\n{ex.Message}",
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void InitializeFilterTimer()
@@ -289,7 +880,7 @@ namespace HRApplication
             btnNextPage.FlatAppearance.BorderSize = 0;
             btnNextPage.Click += BtnNextPage_Click;
 
-            
+
             headerPanel.Controls.AddRange(new Control[] {
         lblPageSize, cmbPageSize, btnPrevPage, lblPageInfo, btnNextPage
             });
@@ -510,7 +1101,7 @@ namespace HRApplication
             if (cmbPageSize.SelectedItem != null)
             {
                 pageSize = (int)cmbPageSize.SelectedItem;
-                currentPage = 1; 
+                currentPage = 1;
                 RefreshDataView();
             }
         }
@@ -547,6 +1138,9 @@ namespace HRApplication
                 candidateCardPanel.Location = new Point(this.ClientSize.Width - candidateCardPanel.Width, currentY);
                 candidateCardPanel.Height = this.ClientSize.Height - currentY;
             }
+
+            // Обновляем позиции новых элементов
+            UpdateExpandedPanelPosition();
         }
 
         protected override void OnResize(EventArgs e)
@@ -640,7 +1234,6 @@ namespace HRApplication
             // Показываем информацию о количестве записей
             lblPageInfo.Text = $"Страница {currentPage} из {totalPages} ({totalItems} записей)";
         }
-
 
         // === ЭКСПОРТ В EXCEL ===
         private void BtnExportCandidates_Click(object sender, EventArgs e)
@@ -799,7 +1392,7 @@ namespace HRApplication
         {
             try
             {
-                if (filterTimer.Enabled) 
+                if (filterTimer.Enabled)
                 {
                     currentPage = 1;
                 }
@@ -822,7 +1415,6 @@ namespace HRApplication
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
 
         private void DisplayCandidates()
         {
@@ -1101,7 +1693,7 @@ namespace HRApplication
             };
             yPos += 90;
 
-            
+
             var lblApplicationsTitle = new Label
             {
                 Text = $"Отклики ({applications.Count}):",
@@ -1112,7 +1704,7 @@ namespace HRApplication
             };
             yPos += 25;
 
-            
+
             var applicationsPanel = new Panel
             {
                 Size = new Size(320, 150),
@@ -1138,7 +1730,7 @@ namespace HRApplication
             }
             yPos += 160;
 
-            
+
             var btnClose = new Button
             {
                 Text = "Закрыть",
@@ -1203,6 +1795,7 @@ namespace HRApplication
             if (filtersPanel != null) filtersPanel.BackColor = DesignColors.CardColor;
             if (mainContentPanel != null) mainContentPanel.BackColor = DesignColors.BackgroundColor;
             if (candidateCardPanel != null) candidateCardPanel.BackColor = DesignColors.CardColor;
+            if (reversalPanel != null) reversalPanel.BackColor = Color.FromArgb(240, 240, 240);
 
             if (dataGridView != null)
             {
@@ -1220,7 +1813,7 @@ namespace HRApplication
                 btnTestRepository.Enabled = false;
                 btnTestRepository.Text = "Тестирование...";
 
-                
+
                 btnExportCandidates.Enabled = false;
                 btnExportVacancies.Enabled = false;
                 btnExportApplications.Enabled = false;
@@ -1231,7 +1824,7 @@ namespace HRApplication
 
                     var repository = new CandidateRepository(currentConnectionString);
 
-                    
+
                     var repositoryCandidates = await repository.GetAllCandidatesAsync();
 
                     var oldCandidates = databaseHelper.GetCandidates();
@@ -1256,7 +1849,7 @@ namespace HRApplication
             }
             finally
             {
-                
+
                 btnTestRepository.Enabled = true;
                 btnTestRepository.Text = "Тест репозитория";
                 btnExportCandidates.Enabled = true;
